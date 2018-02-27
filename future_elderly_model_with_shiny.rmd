@@ -256,9 +256,7 @@ renderPlot({
 renderPrint({
 	c <- cost() %>% format(big.mark = ",")
 	n_c <- as.numeric(cost())
-	ppy <- round((n_c/(n_pts()*(stop_year()-start_year())))) %>% format(big.mark = ",")
-	paste0("Total Estimated Cost for entire cohort is $",c, ". The average per person per year cost is $", ppy, ".") 
-})
+	paste0("Total Estimated Cost for entire cohort is $",c)
 
 ```
 
