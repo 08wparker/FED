@@ -1,0 +1,264 @@
+---
+title: "Future Elderly Health Model"
+output: html_document
+runtime: shiny
+---
+
+```{r packages, include = FALSE}
+
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg))
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+# Package list: feel free to add if necessary
+packages <- c("knitr", "ggplot2", "zoo", "data.table", "dplyr", "shiny", "rlang"
+)
+#Run function to install / unpack
+ipak(packages)
+
+```
+
+
+
+
+```{r functions, echo = FALSE }
+
+state_transition <- function(data, time, delta = 0.1, rho = 0.1, gamma = 0.1, eta = 0.1) {
+
+	c_time <- paste0("state_", time)
+
+	t_p_1 = time +1
+
+	n_state <- paste0("state_", t_p_1)
+
+	n_patients <- nrow(data)
+
+	p <- runif(n_patients, 0, 1)
+	data$p <- p
+
+	data <- data %>% mutate(new_state = case_when(
+		data[, c_time] == "healthy" ~
+			ifelse(inrange(p, 0, delta), "dead", 
+			ifelse(inrange(p, delta, (delta + (1-delta)*rho)), "sick",
+			ifelse(inrange(p, delta + (1-delta)*rho, delta + (1-delta)*rho +(1-delta)*eta), "disabled", "healthy"))),
+		data[, c_time] == "sick" ~
+			ifelse(inrange(p, 0, delta + (1-delta)*gamma), "dead", "sick"),
+		data[, c_time] == "disabled" ~
+			ifelse(inrange(p, 0, delta), "dead", "disabled"),
+		data[, c_time] == "dead" ~"dead"	
+		)
+	)	
+
+	colnames(data)[colnames(data)=="new_state"] <- n_state
+
+	data$p <- NULL
+	return(data)
+}
+
+
+model_sim <- function(initial_state, start_year = 65, stop_year=100, delta = 0.1, rho = 0.1, gamma = 0.1, eta = 0.1){
+	c_model <- initial_state
+	 for (i in start_year:(stop_year-1)) {
+		c_model <- state_transition(c_model, i, delta, rho, gamma, eta)
+	}
+	return(c_model)
+}
+
+cost_year <- function(data, start_year = 65, stop_year = 100, healthy = 100, sick = 500, disabled = 2000, dead = 0){
+	Age <- c(start_year:stop_year)
+	Cost <- c(rep(0, (stop_year - start_year+1)))
+	c_year <- data.frame(Age, Cost)
+
+	for (i in start_year:stop_year) {
+		c_col <- paste0("state_", i)
+
+		t <- table(data[,c_col])
+		
+		if (is.na(t["dead"]) == FALSE){
+				c_year[c_year$Age ==i, "Cost"] <- c_year[c_year$Age ==i, "Cost"] + as.numeric(t["dead"]*dead)
+		}
+
+		if (is.na(t["healthy"]) == FALSE){
+				c_year[c_year$Age ==i, "Cost"] <- c_year[c_year$Age ==i, "Cost"] + as.numeric(t["healthy"]*healthy)
+		}		
+		if (is.na(t["disabled"]) == FALSE){
+				c_year[c_year$Age ==i, "Cost"] <- c_year[c_year$Age ==i, "Cost"] + as.numeric(t["disabled"]*disabled)
+		}
+		if (is.na(t["sick"]) == FALSE){
+				c_year[c_year$Age ==i, "Cost"] <- c_year[c_year$Age ==i, "Cost"] + as.numeric(t["sick"]*sick)
+		}
+	}
+	return(c_year)
+}
+
+total_cost <- function(data, start_year = 65, stop_year = 100, healthy = 100, sick = 500, disabled = 2000, dead = 0){
+	tot_cost <- 0
+	for (i in start_year:stop_year) {
+		c_col <- paste0("state_", i)
+
+		t <- table(data[,c_col])
+		
+		if (is.na(t["dead"]) == FALSE){
+				tot_cost <- tot_cost + t["dead"]*dead
+		}
+
+		if (is.na(t["healthy"]) == FALSE){
+				tot_cost <- tot_cost + t["healthy"]*healthy
+		}		
+		if (is.na(t["disabled"]) == FALSE){
+				tot_cost <- tot_cost + t["disabled"]*disabled
+		}
+		if (is.na(t["sick"]) == FALSE){
+				tot_cost <- tot_cost + t["sick"]*sick
+		}
+	}
+	return(as.numeric(tot_cost))
+}
+```
+
+
+A simple version of the [RAND FEM](https://www.rand.org/pubs/research_briefs/RB9324/index1.html)
+
+There are four states in this model
+
+* Healthy
+* Sick (from cancer)
+* Disabled
+* Dead
+
+![Model Overview](model_overview.png)
+
+
+
+# Set Parameters
+The set parameters for this model correspond to
+
+* transition probabilites
+* number of adults
+* cost of each state
+
+```{r enter_parameters, echo = FALSE}
+
+inputPanel(
+	numericInput("delta", label ="Delta", 0.1),
+	numericInput("rho", label ="Rho", 0.1),
+	numericInput("gamma", label ="Gamma", 0.1),
+	numericInput("eta", label ="Eta", 0.1),
+	numericInput("c_health", label ="Cost of Healthy State", 100, min = 0),
+	numericInput("c_disabled", label ="Cost of Disabled State", 2000, min = 0),
+	numericInput("c_sick", label ="Cost of Sick State", 500, min = 0),
+	numericInput("c_dead", label ="Cost of Dead State", 0, min = 0),
+	numericInput("n_pts", label ="Number of patients", 100, min = 0),
+	numericInput("start_year", label ="Age at Start", 65, min = 0),
+	numericInput("years", label ="Years to Simulate", 35, min = 0)
+
+)
+
+inputPanel(
+	actionButton("sim", label= "Stable Delta Simulation")
+)
+```
+
+simulation code
+```{r simulation, echo = FALSE }
+#stable sim button
+delta <- eventReactive(input$sim, {input$delta})
+rho <- eventReactive(input$sim, {input$rho})
+gamma <- eventReactive(input$sim, {input$gamma})
+eta <- eventReactive(input$sim, {input$eta})
+
+c_health <- eventReactive(input$sim, {input$c_health})
+c_disabled <- eventReactive(input$sim, {input$c_disabled})
+c_sick <- eventReactive(input$sim, {input$c_sick})
+c_dead <- eventReactive(input$sim, {input$c_dead})
+
+n_pts <- eventReactive(input$sim, {input$n_pts})
+
+start_state <- eventReactive(input$sim, {
+	state_65 <- c(rep("healthy", n_pts()))
+	data.frame(state_65)
+}) 
+
+start_year <- eventReactive(input$sim, {input$start_year})
+stop_year <- eventReactive(input$sim, {input$start_year + input$years})
+
+
+model <- eventReactive(input$sim, {
+	m <- model_sim(start_state(), start_year = start_year(), stop_year=stop_year(), delta = delta(), rho = rho(), gamma = gamma(), eta = eta())
+	ID <- c(1:n_pts())
+	m <- cbind(ID, m)
+})
+
+c_year <- eventReactive(input$sim, {
+	cost_year(model(), healthy = c_health(), sick = c_sick(), disabled = c_disabled(), dead = c_dead(), start_year = start_year(), stop_year=stop_year()) 
+})
+
+cost <- eventReactive(input$sim, {
+	total_cost(model(), healthy = c_health(), sick = c_sick(), disabled = c_disabled(), dead = c_dead(), start_year = start_year(), stop_year=stop_year()) 
+})
+
+
+by_age <- eventReactive(input$sim, {
+	col_years <- colnames(model() %>% select(starts_with("state")))
+
+	long_model <- reshape(model(), sep = "_", varying = col_years , idvar = "id", 
+		direction = "long", timevar =  "Age") %>% arrange(id, Age)
+
+	by_age <- long_model %>% group_by(Age, state) %>% summarise(count= n())
+
+	ages <- unique(by_age$Age)
+	states <- unique(by_age$state)
+	combos <- expand.grid(Age = ages, state = states)
+
+	full_join(by_age, combos, by = c("Age" = "Age", "state" = "state")) %>%
+		mutate(count = ifelse(is.na(count), 0, count)) %>% 
+		mutate(prop = count/n_pts(), percent = prop*100) %>%
+		mutate(state = factor(state, levels = c("dead", "disabled", "sick", "healthy"))) %>%
+		arrange(Age, match(state, c("dead", "disabled", "sick", "healthy")))
+})
+
+
+
+```
+
+#Results:
+
+## States over time for each simultated indvidual
+```{r output_sim_results, echo = FALSE }
+
+renderDataTable({
+	model()
+}, options = list(pageLength = 10))
+
+```
+
+
+## Population state distribution and per year cost over time 
+```{r plot_sim_results, echo = FALSE }
+
+renderPlot({
+	area_plot <- ggplot() + geom_area(data = by_age(), aes(x = Age, y =count, fill=state), position = 'stack', colour = "gray", alpha = 0.5) +
+		scale_fill_brewer(palette = "RdYlGn") + labs(y ="Number of Patients") +
+		geom_line(data = c_year(), aes(x=Age, y = Cost/500, colour = "Yearly Cost")) +
+		scale_y_continuous(sec.axis = sec_axis(~.*500, name = "$ per year")) +
+		scale_colour_manual(name = "", values= "black")
+	area_plot
+})
+
+```
+
+## Total Cost Estimate for Duration of Simulation
+```{r cost, echo = FALSE}
+
+renderPrint({
+	c <- cost() %>% format(big.mark = ",")
+	n_c <- as.numeric(cost())
+	ppy <- round((n_c/(n_pts()*(stop_year()-start_year())))) %>% format(big.mark = ",")
+	paste0("Total Estimated Cost for entire cohort is $",c, ". The average per person per year cost is $", ppy, ".") 
+})
+
+```
+
