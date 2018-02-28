@@ -61,7 +61,7 @@ model_sim <- function(initial_state, start_year = 65, stop_year=100, delta = 0.1
 
 
 
-state_transition_decay <- function(data, time, rho = 0.1, gamma = 0.1, eta = 0.1) {
+state_transition_decay <- function(data, time, rho = 0.1, gamma = 0.1, eta = 0.1, start_year = 65, stop_year=100) {
 
 	c_time <- paste0("state_", time)
 
@@ -74,7 +74,8 @@ state_transition_decay <- function(data, time, rho = 0.1, gamma = 0.1, eta = 0.1
 	p <- runif(n_patients, 0, 1)
 	data$p <- p
 	
-	delta <- (time-65)/35
+	d_years <- stop_year - start_year
+	delta <- (time-start_year)/d_years
 
 	data <- data %>% mutate(new_state = case_when(
 		data[, c_time] == "healthy" ~
@@ -99,7 +100,7 @@ state_transition_decay <- function(data, time, rho = 0.1, gamma = 0.1, eta = 0.1
 model_sim_decay <- function(initial_state, start_year = 65, stop_year=100,rho = 0.1, gamma = 0.1, eta = 0.1){
 	c_model <- initial_state
 	for (i in start_year:(stop_year-1)) {
-		c_model <- state_transition_decay(c_model, i, rho, gamma, eta)
+		c_model <- state_transition_decay(c_model, time = i, rho = rho, gamma = gamma, eta = eta, start_year = start_year, stop_year = stop_year)
 	}
 	return(c_model)
 }
