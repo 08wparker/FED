@@ -14,7 +14,7 @@ ipak <- function(pkg){
 }
 
 # Package list: feel free to add if necessary
-packages <- c("knitr", "ggplot2", "zoo", "data.table", "dplyr", "shiny", "rlang"
+packages <- c("knitr", "ggplot2", "dplyr", "shiny", "scales", "data.table"
 )
 #Run function to install / unpack
 ipak(packages)
@@ -129,24 +129,26 @@ There are four states in this model
 * Disabled
 * Dead
 
-![Model Overview](model_overview.png)
+
+**Model Schematic**
+![ ](model_overview.png)
 
 
 
 # Set Parameters
-The set parameters for this model correspond to
+The modifiable parameters in this model include
 
-* transition probabilites
+* transition probabilites **(\(\delta \; \rho \; \gamma \; \eta\))**
 * number of adults
 * cost of each state
 
 ```{r enter_parameters, echo = FALSE}
 
 inputPanel(
-	numericInput("delta", label ="Delta", 0.1),
-	numericInput("rho", label ="Rho", 0.1),
-	numericInput("gamma", label ="Gamma", 0.1),
-	numericInput("eta", label ="Eta", 0.1),
+	numericInput("delta", label =HTML("&delta;"), value =0.1, width = "100%" ),
+	numericInput("rho", label =HTML("&rho;"), value =0.1, width = "100%"),
+	numericInput("gamma", label =HTML("&gamma;"), value =0.1, width = "100%"),
+	numericInput("eta", label =HTML("&eta;"), value =0.1, width = "100%"),
 	numericInput("c_health", label ="Cost of Healthy State", 100, min = 0),
 	numericInput("c_disabled", label ="Cost of Disabled State", 2000, min = 0),
 	numericInput("c_sick", label ="Cost of Sick State", 500, min = 0),
@@ -162,7 +164,6 @@ inputPanel(
 )
 ```
 
-simulation code
 ```{r simulation, echo = FALSE }
 #stable sim button
 delta <- eventReactive(input$sim, {input$delta})
@@ -236,14 +237,19 @@ renderDataTable({
 ```
 
 
-## Population state distribution and per year cost over time 
+## Population state distribution and cost over time
 ```{r plot_sim_results, echo = FALSE }
 
 renderPlot({
-	area_plot <- ggplot() + geom_area(data = by_age(), aes(x = Age, y =count, fill=state), position = 'stack', colour = "gray", alpha = 0.5) +
-		scale_fill_brewer(palette = "RdYlGn") + labs(y ="Number of Patients") +
-		geom_line(data = c_year(), aes(x=Age, y = Cost/500, colour = "Yearly Cost")) +
-		scale_y_continuous(sec.axis = sec_axis(~.*500, name = "$ per year")) +
+	n <- n_pts()
+	y_lab <- paste0("% of Patients (n=",n,")")
+
+
+	area_plot <- ggplot() + geom_area(data = by_age(), aes(x = Age, y = percent, fill=state), position = 'stack', colour = "gray", alpha = 0.5) +
+		scale_fill_brewer(palette = "RdYlGn") + labs(y =y_lab) +
+		geom_line(data = c_year(), aes(x=Age, y = Cost/(8*n), colour = "Yearly Cost")) +
+		scale_y_continuous(sec.axis = sec_axis(~.*8, name = "Per patient cost", labels = scales::dollar), expand=c(0,0)) +
+		scale_x_continuous(breaks = seq(start_year(), stop_year(), 5), expand=c(0,0)) +
 		scale_colour_manual(name = "", values= "black")
 	area_plot
 })
@@ -255,8 +261,7 @@ renderPlot({
 
 renderPrint({
 	c <- cost() %>% format(big.mark = ",")
-	n_c <- as.numeric(cost())
-	paste0("Total Estimated Cost for entire cohort is $",c)
-
+	paste0("Total Estimated Cost for entire cohort is $", c)
+})
 ```
 
