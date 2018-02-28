@@ -59,6 +59,10 @@ model_sim <- function(initial_state, start_year = 65, stop_year=100, delta = 0.1
 	return(c_model)
 }
 
+
+
+
+
 cost_year <- function(data, start_year = 65, stop_year = 100, healthy = 100, sick = 500, disabled = 2000, dead = 0){
 	Age <- c(start_year:stop_year)
 	Cost <- c(rep(0, (stop_year - start_year+1)))
@@ -127,11 +131,10 @@ The simulation begins with all of the elderly healthy at the specified starting 
 ![ ](model_overview.png)
 
 
-# Set Parameters
+# Set Parameters and Run Simulation
 Modify the model parameters in the menu below. Options include
 
 * state transition probabilites **(\(\delta \; \rho \; \gamma \; \eta\))**
-* healthcare cost of each state
 * number of adults in the simulation
 * the starting and stopping age for the simulation
 
@@ -143,10 +146,6 @@ inputPanel(
 	numericInput("rho", label =HTML("&rho; (sickness risk)"), value =0.1, width = "100%"),
 	numericInput("gamma", label =HTML("&gamma; (higher death risk given sick)"), value =0.1, width = "100%"),
 	numericInput("eta", label =HTML("&eta; (disability risk)"), value =0.1, width = "100%"),
-	numericInput("c_health", label ="Cost of Healthy State", 100, min = 0),
-	numericInput("c_disabled", label ="Cost of Disabled State", 2000, min = 0),
-	numericInput("c_sick", label ="Cost of Sick State", 500, min = 0),
-	numericInput("c_dead", label ="Cost of Dead State", 0, min = 0),
 	numericInput("n_pts", label ="Number of patients", 100, min = 0),
 	numericInput("start_year", label ="Age at Start", 65, min = 0),
 	numericInput("years", label ="Years to Simulate", 35, min = 0)
@@ -160,26 +159,20 @@ inputPanel(
 
 ```{r simulation, echo = FALSE }
 #stable sim button
-delta <- eventReactive(input$sim, {input$delta})
-rho <- eventReactive(input$sim, {input$rho})
-gamma <- eventReactive(input$sim, {input$gamma})
-eta <- eventReactive(input$sim, {input$eta})
+delta <- reactive({input$delta})
+rho <- reactive({input$rho})
+gamma <- reactive({input$gamma})
+eta <- reactive({input$eta})
 
-c_health <- eventReactive(input$sim, {input$c_health})
-c_disabled <- eventReactive(input$sim, {input$c_disabled})
-c_sick <- eventReactive(input$sim, {input$c_sick})
-c_dead <- eventReactive(input$sim, {input$c_dead})
+n_pts <- reactive({input$n_pts})
 
-n_pts <- eventReactive(input$sim, {input$n_pts})
-
-start_state <- eventReactive(input$sim, {
+start_state <- reactive({
 	state_65 <- c(rep("healthy", n_pts()))
 	data.frame(state_65)
 }) 
 
-start_year <- eventReactive(input$sim, {input$start_year})
-stop_year <- eventReactive(input$sim, {input$start_year + input$years})
-
+start_year <- reactive({input$start_year})
+stop_year <- reactive({input$start_year + input$years})
 
 model <- eventReactive(input$sim, {
 	m <- model_sim(start_state(), start_year = start_year(), stop_year=stop_year(), delta = delta(), rho = rho(), gamma = gamma(), eta = eta())
@@ -187,16 +180,7 @@ model <- eventReactive(input$sim, {
 	m <- cbind(ID, m)
 })
 
-c_year <- eventReactive(input$sim, {
-	cost_year(model(), healthy = c_health(), sick = c_sick(), disabled = c_disabled(), dead = c_dead(), start_year = start_year(), stop_year=stop_year()) 
-})
-
-cost <- eventReactive(input$sim, {
-	total_cost(model(), healthy = c_health(), sick = c_sick(), disabled = c_disabled(), dead = c_dead(), start_year = start_year(), stop_year=stop_year()) 
-})
-
-
-by_age <- eventReactive(input$sim, {
+by_age <- reactive({
 	col_years <- colnames(model() %>% select(starts_with("state")))
 
 	long_model <- reshape(model(), sep = "_", varying = col_years , idvar = "id", 
@@ -214,14 +198,8 @@ by_age <- eventReactive(input$sim, {
 		mutate(state = factor(state, levels = c("dead", "disabled", "sick", "healthy"))) %>%
 		arrange(Age, match(state, c("dead", "disabled", "sick", "healthy")))
 })
-
-
-
 ```
 
-#Results:
-
-## States over time for each simultated indvidual
 ```{r output_sim_results, echo = FALSE }
 
 renderDataTable({
@@ -231,7 +209,43 @@ renderDataTable({
 ```
 
 
-## Population state distribution and cost over time
+##Costs
+Set the healthcare cost of each state below. Note changes in the cost y-axis scale when adjusting costs
+```{r cost_panel, echo = FALSE }
+
+inputPanel(
+	numericInput("c_health", label ="Cost of Healthy State", 100, min = 0),
+	numericInput("c_disabled", label ="Cost of Disabled State", 2000, min = 0),
+	numericInput("c_sick", label ="Cost of Sick State", 500, min = 0),
+	numericInput("c_dead", label ="Cost of Dead State", 0, min = 0)
+)
+
+
+c_health <- reactive({input$c_health})
+c_disabled <- reactive({input$c_disabled})
+c_sick <- reactive({input$c_sick})
+c_dead <- reactive({input$c_dead})
+
+c_year <- reactive({
+	cost_year(model(), healthy = c_health(), sick = c_sick(), disabled = c_disabled(), dead = c_dead(), start_year = start_year(), stop_year=stop_year()) 
+})
+
+cost <- reactive({
+	total_cost(model(), healthy = c_health(), sick = c_sick(), disabled = c_disabled(), dead = c_dead(), start_year = start_year(), stop_year=stop_year()) 
+})
+
+```
+
+
+```{r cost, echo = FALSE}
+
+renderPrint({
+	c <- cost() %>% format(big.mark = ",")
+	paste0("Total estimated sost for entire population is $", c)
+})
+```
+
+
 ```{r plot_sim_results, echo = FALSE }
 
 renderPlot({
@@ -241,22 +255,12 @@ renderPlot({
 	c_df <- c_year()
 	max_pp_cost <- max(c_df$Cost)/n
 	area_plot <- ggplot() + geom_area(data = by_age(), aes(x = Age, y = percent, fill=state), position = 'stack', colour = "gray", alpha = 0.5) +
-		scale_fill_brewer(palette = "RdYlGn") + labs(y =y_lab) +
+		scale_fill_brewer(palette = "RdYlGn") + labs(y =y_lab, title = "Population state and cost distribution over time") +
 		geom_line(data = c_df, aes(x=Age, y = 90*Cost/(max_pp_cost*n), colour = "Yearly Cost")) +
 		scale_y_continuous(sec.axis = sec_axis(~.*(max_pp_cost/90), name = "Per patient cost", labels = scales::dollar), expand=c(0,0)) +
 		scale_x_continuous(breaks = seq(start_year(), stop_year(), 5), expand=c(0,0)) +
-		scale_colour_manual(name = "", values= "black")
+		scale_colour_manual(name = "", values= "black") + theme(plot.title = element_text(size=24), text=element_text(size=14))
 	area_plot
 })
 
 ```
-
-## Total Cost Estimate for Duration of Simulation
-```{r cost, echo = FALSE}
-
-renderPrint({
-	c <- cost() %>% format(big.mark = ",")
-	paste0("Total Estimated Cost for entire cohort is $", c)
-})
-```
-
