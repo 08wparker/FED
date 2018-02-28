@@ -1,6 +1,7 @@
 ---
 title: "Future Elderly Health Model"
 author: "William Parker, william.parker@uchospitals.edu"
+date: "2/27/2018"
 output: html_document
 runtime: shiny
 ---
@@ -120,7 +121,7 @@ The FED model simulates the aging and death process for elderly people. There ar
 * Disabled (from a stroke)
 * Dead
 
-Individuals begin the simulation healthy at the specified starting age. Each year, individuals transition between states with the probabilities indicated in the model schematic below.
+The simulation begins with all of the elderly healthy at the specified starting age. Each year, elderly individuals transition between states with the probabilities indicated in the model schematic below.
 
 **Model Schematic**
 ![ ](model_overview.png)
@@ -130,18 +131,18 @@ Individuals begin the simulation healthy at the specified starting age. Each yea
 Modify the model parameters in the menu below. Options include
 
 * state transition probabilites **(\(\delta \; \rho \; \gamma \; \eta\))**
+* healthcare cost of each state
 * number of adults in the simulation
 * the starting and stopping age for the simulation
-* cost of each state
 
 
 ```{r enter_parameters, echo = FALSE}
 
 inputPanel(
-	numericInput("delta", label =HTML("&delta;"), value =0.1, width = "100%" ),
-	numericInput("rho", label =HTML("&rho;"), value =0.1, width = "100%"),
-	numericInput("gamma", label =HTML("&gamma;"), value =0.1, width = "100%"),
-	numericInput("eta", label =HTML("&eta;"), value =0.1, width = "100%"),
+	numericInput("delta", label =HTML("&delta; (baseline death risk)"), value =0.1, width = "100%" ),
+	numericInput("rho", label =HTML("&rho; (sickness risk)"), value =0.1, width = "100%"),
+	numericInput("gamma", label =HTML("&gamma; (higher death risk given sick)"), value =0.1, width = "100%"),
+	numericInput("eta", label =HTML("&eta; (disability risk)"), value =0.1, width = "100%"),
 	numericInput("c_health", label ="Cost of Healthy State", 100, min = 0),
 	numericInput("c_disabled", label ="Cost of Disabled State", 2000, min = 0),
 	numericInput("c_sick", label ="Cost of Sick State", 500, min = 0),
