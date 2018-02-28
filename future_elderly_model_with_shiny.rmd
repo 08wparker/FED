@@ -61,6 +61,48 @@ model_sim <- function(initial_state, start_year = 65, stop_year=100, delta = 0.1
 
 
 
+state_transition_decay <- function(data, time, rho = 0.1, gamma = 0.1, eta = 0.1) {
+
+	c_time <- paste0("state_", time)
+
+	t_p_1 = time +1
+
+	n_state <- paste0("state_", t_p_1)
+
+	n_patients <- nrow(data)
+
+	p <- runif(n_patients, 0, 1)
+	data$p <- p
+	
+	delta <- (time-65)/35
+
+	data <- data %>% mutate(new_state = case_when(
+		data[, c_time] == "healthy" ~
+			ifelse(inrange(p, 0, delta), "dead", 
+			ifelse(inrange(p, delta, (delta + (1-delta)*rho)), "sick",
+			ifelse(inrange(p, delta + (1-delta)*rho, delta + (1-delta)*rho +(1-delta)*eta), "disabled", "healthy"))),
+		data[, c_time] == "sick" ~
+			ifelse(inrange(p, 0, delta + (1-delta)*gamma), "dead", "sick"),
+		data[, c_time] == "disabled" ~
+			ifelse(inrange(p, 0, delta), "dead", "disabled"),
+		data[, c_time] == "dead" ~"dead"	
+		)
+	)	
+
+	colnames(data)[colnames(data)=="new_state"] <- n_state
+
+	data$p <- NULL
+	return(data)
+}
+
+
+model_sim_decay <- function(initial_state, start_year = 65, stop_year=100,rho = 0.1, gamma = 0.1, eta = 0.1){
+	c_model <- initial_state
+	for (i in start_year:(stop_year-1)) {
+		c_model <- state_transition_decay(c_model, i, rho, gamma, eta)
+	}
+	return(c_model)
+}
 
 
 cost_year <- function(data, start_year = 65, stop_year = 100, healthy = 100, sick = 500, disabled = 2000, dead = 0){
@@ -139,6 +181,8 @@ Modify the model parameters in the menu below. Options include
 * the starting and stopping age for the simulation
 
 
+Please note that the baseline risk of death **(\(\delta\) parameter)** is only used in the "Stable Delta" simulation. 
+In the "Increasing Delta" Simulation, the probability of death in a given year increases as individuals age, specifically **\(\delta = \frac{age-(age\; at \;start)}{years \; to \; simulate}\)**
 ```{r enter_parameters, echo = FALSE}
 
 inputPanel(
@@ -153,7 +197,8 @@ inputPanel(
 )
 
 inputPanel(
-	actionButton("sim", label= "Stable Delta Simulation")
+	actionButton("sim", label= "Stable Delta Simulation"),
+	actionButton("decay", label= "Increasing Delta Simulation")
 )
 ```
 
@@ -166,24 +211,36 @@ eta <- reactive({input$eta})
 
 n_pts <- reactive({input$n_pts})
 
-start_state <- reactive({
-	state_65 <- c(rep("healthy", n_pts()))
-	data.frame(state_65)
-}) 
 
 start_year <- reactive({input$start_year})
 stop_year <- reactive({input$start_year + input$years})
 
-model <- eventReactive(input$sim, {
+start_state <- reactive({
+	i_state <- paste0("state_", start_year())
+	a <- c(rep("healthy", n_pts()))
+	ss <- data.frame(a)
+	colnames(ss)[colnames(ss) == "a"] <- i_state
+	ss
+}) 
+
+model <- reactiveValues(data = NULL)
+observeEvent(input$sim, {
 	m <- model_sim(start_state(), start_year = start_year(), stop_year=stop_year(), delta = delta(), rho = rho(), gamma = gamma(), eta = eta())
 	ID <- c(1:n_pts())
-	m <- cbind(ID, m)
+	model$data <- cbind(ID, m)
 })
 
-by_age <- reactive({
-	col_years <- colnames(model() %>% select(starts_with("state")))
+observeEvent(input$decay, {
+	m <- model_sim_decay(start_state(), start_year = start_year(), stop_year=stop_year(), rho = rho(), gamma = gamma(), eta = eta())
+	ID <- c(1:n_pts())
+	model$data <- cbind(ID, m)
+})
 
-	long_model <- reshape(model(), sep = "_", varying = col_years , idvar = "id", 
+
+by_age <- reactive({
+	col_years <- colnames(model$data %>% select(starts_with("state")))
+
+	long_model <- reshape(model$data, sep = "_", varying = col_years , idvar = "id", 
 		direction = "long", timevar =  "Age") %>% arrange(id, Age)
 
 	by_age <- long_model %>% group_by(Age, state) %>% summarise(count= n())
@@ -203,7 +260,9 @@ by_age <- reactive({
 ```{r output_sim_results, echo = FALSE }
 
 renderDataTable({
-	model()
+	if (is.null(model$data) == FALSE) {
+		model$data
+	}
 }, options = list(pageLength = 10))
 
 ```
@@ -227,11 +286,11 @@ c_sick <- reactive({input$c_sick})
 c_dead <- reactive({input$c_dead})
 
 c_year <- reactive({
-	cost_year(model(), healthy = c_health(), sick = c_sick(), disabled = c_disabled(), dead = c_dead(), start_year = start_year(), stop_year=stop_year()) 
+	cost_year(model$data, healthy = c_health(), sick = c_sick(), disabled = c_disabled(), dead = c_dead(), start_year = start_year(), stop_year=stop_year()) 
 })
 
 cost <- reactive({
-	total_cost(model(), healthy = c_health(), sick = c_sick(), disabled = c_disabled(), dead = c_dead(), start_year = start_year(), stop_year=stop_year()) 
+	total_cost(model$data, healthy = c_health(), sick = c_sick(), disabled = c_disabled(), dead = c_dead(), start_year = start_year(), stop_year=stop_year()) 
 })
 
 ```
@@ -240,8 +299,10 @@ cost <- reactive({
 ```{r cost, echo = FALSE}
 
 renderPrint({
-	c <- cost() %>% format(big.mark = ",")
-	paste0("Total estimated sost for entire population is $", c)
+	if (is.null(model$data) == FALSE) {
+		c <- cost() %>% format(big.mark = ",")
+		paste0("Total estimated sost for entire population is $", c)
+	}
 })
 ```
 
@@ -249,18 +310,20 @@ renderPrint({
 ```{r plot_sim_results, echo = FALSE }
 
 renderPlot({
-	n <- n_pts()
-	y_lab <- paste0("% of Patients (n=",n,")")
+	if (is.null(model$data) == FALSE) {
+		n <- n_pts()
+		y_lab <- paste0("% of Patients (n=",n,")")
 
-	c_df <- c_year()
-	max_pp_cost <- max(c_df$Cost)/n
-	area_plot <- ggplot() + geom_area(data = by_age(), aes(x = Age, y = percent, fill=state), position = 'stack', colour = "gray", alpha = 0.5) +
-		scale_fill_brewer(palette = "RdYlGn") + labs(y =y_lab, title = "Population state and cost distribution over time") +
-		geom_line(data = c_df, aes(x=Age, y = 90*Cost/(max_pp_cost*n), colour = "Yearly Cost")) +
-		scale_y_continuous(sec.axis = sec_axis(~.*(max_pp_cost/90), name = "Per patient cost", labels = scales::dollar), expand=c(0,0)) +
-		scale_x_continuous(breaks = seq(start_year(), stop_year(), 5), expand=c(0,0)) +
-		scale_colour_manual(name = "", values= "black") + theme(plot.title = element_text(size=24), text=element_text(size=14))
-	area_plot
+		c_df <- c_year()
+		max_pp_cost <- max(c_df$Cost)/n
+		area_plot <- ggplot() + geom_area(data = by_age(), aes(x = Age, y = percent, fill=state), position = 'stack', colour = "gray", alpha = 0.5) +
+			scale_fill_brewer(palette = "RdYlGn") + labs(y =y_lab, title = "Population state and cost distribution over time") +
+			geom_line(data = c_df, aes(x=Age, y = 90*Cost/(max_pp_cost*n), colour = "Yearly Cost")) +
+			scale_y_continuous(sec.axis = sec_axis(~.*(max_pp_cost/90), name = "Per patient cost", labels = scales::dollar), expand=c(0,0)) +
+			scale_x_continuous(breaks = seq(start_year(), stop_year(), 5), expand=c(0,0)) +
+			scale_colour_manual(name = "", values= "black") + theme(plot.title = element_text(size=24), text=element_text(size=14))
+		area_plot
+	}
 })
 
 ```
