@@ -5,24 +5,14 @@ runtime: shiny
 ---
 
 ```{r packages, include = FALSE}
-
-ipak <- function(pkg){
-  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-  if (length(new.pkg))
-    install.packages(new.pkg, dependencies = TRUE)
-  sapply(pkg, require, character.only = TRUE)
-}
-
-# Package list: feel free to add if necessary
-packages <- c("knitr", "ggplot2", "dplyr", "shiny", "scales", "data.table"
-)
-#Run function to install / unpack
-ipak(packages)
-
+library("knitr")
+library("ggplot2")
+library("dplyr")
+library("shiny")
+library("scales")
+library("data.table")
+library("rsconnect")
 ```
-
-
-
 
 ```{r functions, echo = FALSE }
 
@@ -244,11 +234,12 @@ renderPlot({
 	n <- n_pts()
 	y_lab <- paste0("% of Patients (n=",n,")")
 
-
+	c_df <- c_year()
+	max_pp_cost <- max(c_df$Cost)/n
 	area_plot <- ggplot() + geom_area(data = by_age(), aes(x = Age, y = percent, fill=state), position = 'stack', colour = "gray", alpha = 0.5) +
 		scale_fill_brewer(palette = "RdYlGn") + labs(y =y_lab) +
-		geom_line(data = c_year(), aes(x=Age, y = Cost/(8*n), colour = "Yearly Cost")) +
-		scale_y_continuous(sec.axis = sec_axis(~.*8, name = "Per patient cost", labels = scales::dollar), expand=c(0,0)) +
+		geom_line(data = c_df, aes(x=Age, y = 90*Cost/(max_pp_cost*n), colour = "Yearly Cost")) +
+		scale_y_continuous(sec.axis = sec_axis(~.*(max_pp_cost/90), name = "Per patient cost", labels = scales::dollar), expand=c(0,0)) +
 		scale_x_continuous(breaks = seq(start_year(), stop_year(), 5), expand=c(0,0)) +
 		scale_colour_manual(name = "", values= "black")
 	area_plot
