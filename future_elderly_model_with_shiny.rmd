@@ -1,7 +1,7 @@
 ---
 title: "Future Elderly Health Model"
 author: "William Parker, william.parker@uchospitals.edu"
-date: "2/27/2018"
+date: "3/17/2018"
 output: html_document
 runtime: shiny
 ---
@@ -159,7 +159,7 @@ total_cost <- function(data, start_year = 65, stop_year = 100, healthy = 100, si
 ```
 
 
-A simple version of the [RAND FEM](https://www.rand.org/pubs/research_briefs/RB9324/index1.html) inspired by a homework question in chapter 19 of [Health Economics](https://www.macmillanihe.com/companion/Bhattacharya-Health-Economics/) by Jay Battacharya, Timothy Hyde, Peter Tu (2014).
+A simple version of the [RAND FEM](https://www.rand.org/pubs/research_briefs/RB9324/index1.html) inspired by a homework question in chapter 19 of [Health Economics](https://www.macmillanihe.com/companion/Bhattacharya-Health-Economics/) by Jay Bhattacharya, Timothy Hyde, Peter Tu (2014).
 
 The FED model simulates the aging and death process for elderly people. There are four states individuals can assume:
 
@@ -171,8 +171,8 @@ The FED model simulates the aging and death process for elderly people. There ar
 The simulation begins with all of the elderly healthy at the specified starting age. Each year, elderly individuals transition between states with the probabilities indicated in the model schematic below.
 
 **Model Schematic**
-![ ](model_overview.png)
 
+![](model_overview.jpeg)
 
 # Set Parameters and Run Simulation
 Modify the model parameters in the menu below. Options include
