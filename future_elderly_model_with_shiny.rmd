@@ -1,7 +1,7 @@
 ---
 title: "Future Elderly Health Model"
 author: "William Parker, william.parker@uchospitals.edu"
-date: "3/17/2018"
+date: "3/27/2018"
 output: html_document
 runtime: shiny
 ---
@@ -172,7 +172,7 @@ The simulation begins with all of the elderly healthy at the specified starting 
 
 **Model Schematic**
 
-![](model_overview.jpeg)
+![](model_overview.png)
 
 # Set Parameters and Run Simulation
 Modify the model parameters in the menu below. Options include
